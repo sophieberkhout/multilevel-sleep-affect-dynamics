@@ -177,3 +177,194 @@ write.table(dat_NA_wider, "../../../OneDrive - Universiteit Utrecht/Projects/4. 
 
 # think about plotting
 
+# compute interval lengths
+intervalLengths <- function(dat, i, d, begin_i, phase = "day", n_missing = 20) {
+  # get subset of participant and day
+  dat_i_d <- subset(dat, participant_id == i & study_day == d)
+  # remove rows with no start time
+  dat_i_d_na_rm <- dat_i_d[!is.na(dat_i_d$time_start), ]
+  # extract start times
+  t_start <- dat_i_d_na_rm$time_start
+  
+  if (phase == "day") {
+    # compute interval lengths including begin and end time
+    interval_length <- difftime(t_start[-1],
+                                t_start[-length(t_start)],
+                                units = "sec")
+  }
+  
+  if (phase != "day") {
+    # add date to begin time
+    begin_datetime <- lubridate::parse_date_time(
+      paste(lubridate::date(t_start[1]), begin_i),
+      "ymd HMS", tz = "Europe/Brussels"
+    )
+    
+    # get end datetime 12.5 hours later
+    end_datetime <- begin_datetime + lubridate::hours(12) + lubridate::minutes(30)
+  }
+  
+  if (phase == "night") {
+    # compute interval lengths including begin and end time
+    interval_length <- difftime(c(t_start[1], end_datetime),
+                                c(begin_datetime, t_start[length(t_start)]),
+                                units = "sec")
+  }
+  
+  if (phase == "day_new" | phase == "night_new") {
+    # compute number of missing values to add
+    n_na <- n_missing - length(t_start)
+    
+    # compute interval lengths including begin and end time
+    interval_length <- difftime(c(t_start, end_datetime),
+                                c(begin_datetime, t_start),
+                                units = "sec")
+    
+    # compute where to add missing values
+    if (length(t_start) > 0) {
+      # create new vector
+      new_interval_length <- as.numeric(interval_length)
+    
+      # repeated for every NA to add
+      for (r in 1:n_na) {
+        # transform to list to easily add multiple values in place
+        list_interval_length <- as.list(new_interval_length)
+    
+        # compute the largest interval in the current iteration
+        largest <- which.max(list_interval_length)
+        
+        # replace largest interval with two intervals of half its length
+        list_interval_length[[largest]] <- rep(list_interval_length[[largest]] / 2,
+                                               2)
+        # unlist to create new vector
+        new_interval_length <- unlist(list_interval_length)
+      }
+    }
+  }
+  
+  if (phase == "day_new") {
+    if (length(t_start) > 0) {
+      interval_length <- new_interval_length[-c(1, length(new_interval_length))]
+    } else {
+      interval_length <- NA
+    }
+  }
+  
+  if (phase == "night_new") {
+    if (length(t_start) > 0) {
+      interval_length <- new_interval_length[c(1, length(new_interval_length))]
+    } else {
+      interval_length <- NA
+    }
+  }
+  
+  return(as.numeric(interval_length))
+}
+
+list_day_il <- lapply(1:103, function(i) lapply(1:21, function(d) intervalLengths(dat, participants[i], days[d], begin_i$daily_start[i], phase = "day")))
+unlist_day_il <- lapply(1:103, function(i) unlist(list_day_il[[i]]))
+average_day_il_i <- sapply(1:103, function(i) mean(unlist_day_il[[i]]))
+
+hist(average_day_il_i / 60)
+mean(average_day_il_i / 60)
+
+hist(unlist(unlist_day_il) / 60, breaks = 20)
+
+list_df_day_il_i <- lapply(1:103, function(i) data.frame(participant_id = participants[i], interval = unlist_day_il[[i]]))
+df_day_il <- data.table::rbindlist(list_df_day_il_i)
+
+set.seed(13)
+random_i <- sample(participants, 9)
+df_day_plot <- subset(df_day_il, participant_id %in% random_i)
+df_day_plot$participant_id <- as.factor(df_day_plot$participant_id)
+df_day_plot$interval <- df_day_plot$interval / 60
+
+ggplot2::ggplot(df_day_plot) + ggplot2::geom_histogram(ggplot2::aes(x = interval)) +
+  ggplot2::facet_wrap(ggplot2::vars(participant_id))
+
+list_night_il <- lapply(1:103, function(i) sapply(1:21, function(d) intervalLengths(dat, participants[i], days[d], begin_i$daily_start[i], phase = "night")))
+
+computeNightInterval <- function(x) {
+  morning <- x[1, ]
+  evening <- x[2, ]
+  night_interval_sec <- morning[-1] + evening[-length(evening)] + 11.5 * 60 * 60
+  return(night_interval_sec)
+}
+
+night_il <- sapply(1:103, function(i) computeNightInterval(list_night_il[[i]]))
+list_df_night_il_i <- lapply(1:103, function(i) data.frame(participant_id = participants[i], interval = night_il[, i]))
+df_night_il <- data.table::rbindlist(list_df_night_il_i)
+
+df_night_plot <- subset(df_night_il, participant_id %in% random_i)
+df_night_plot$participant_id <- as.factor(df_night_plot$participant_id)
+df_night_plot$interval <- df_night_plot$interval / 60 / 60
+ggplot2::ggplot(df_night_plot) + ggplot2::geom_histogram(ggplot2::aes(x = interval)) +
+  ggplot2::facet_wrap(ggplot2::vars(participant_id))
+
+average_night_il_i <- apply(night_il, 2, mean, na.rm = TRUE)
+hist(average_night_il_i / 60 / 60)
+mean(average_night_il_i / 60 / 60)
+
+hist(night_il / 60 / 60)
+
+list_day_il_new <- lapply(1:103, function(i) lapply(1:21, function(d) intervalLengths(dat, participants[i], days[d], begin_i$daily_start[i], phase = "day_new")))
+unlist_day_il_new <- lapply(1:103, function(i) unlist(list_day_il_new[[i]]))
+average_day_il_i_new <- sapply(1:103, function(i) mean(unlist_day_il_new[[i]]))
+
+list_df_day_il_i_new <- lapply(1:103, function(i) data.frame(participant_id = participants[i], interval = unlist_day_il_new[[i]]))
+df_day_il_new <- data.table::rbindlist(list_df_day_il_i_new)
+
+df_day_plot$correction <- "No"
+
+df_day_plot_new <- subset(df_day_il_new, participant_id %in% random_i)
+df_day_plot_new$correction <- "Yes"
+df_day_plot_new$interval <- df_day_plot_new$interval / 60
+
+ggplot2::ggplot(df_day_plot_new) + ggplot2::geom_histogram(ggplot2::aes(x = interval), bins = 15) +
+  ggplot2::facet_wrap(ggplot2::vars(participant_id))
+
+df_day_plot_both <- rbind(df_day_plot, df_day_plot_new)
+df_day_plot_both$correction <- as.factor(df_day_plot_both$correction)
+
+ggplot2::ggplot(df_day_plot_both) + ggplot2::geom_histogram(ggplot2::aes(x = interval, fill = correction), position = "dodge") +
+ggplot2::facet_wrap(ggplot2::vars(participant_id))
+
+hist(average_day_il_i_new / 60)
+mean(average_day_il_i_new / 60, na.rm = TRUE)
+
+list_night_il_new <- lapply(1:103, function(i) lapply(1:21, function(d) intervalLengths(dat, participants[i], days[d], begin_i$daily_start[i], phase = "night_new")))
+
+computeNightIntervalNew <- function(x) {
+  morning <- sapply(1:21, function(d) x[[d]][1])
+  evening <- sapply(1:21, function(d) x[[d]][2])
+  night_interval_sec <- morning[-1] + evening[-length(evening)] + 11.5 * 60 * 60
+  return(night_interval_sec)
+}
+
+night_il_new <- sapply(1:103, function(i) computeNightIntervalNew(list_night_il_new[[i]]))
+
+list_df_night_il_i_new <- lapply(1:103, function(i) data.frame(participant_id = participants[i], interval = night_il_new[, i]))
+df_night_il_new <- data.table::rbindlist(list_df_night_il_i_new)
+
+df_night_plot_new <- subset(df_night_il_new, participant_id %in% random_i)
+df_night_plot_new$participant_id <- as.factor(df_night_plot_new$participant_id)
+df_night_plot_new$interval <- df_night_plot_new$interval / 60 / 60
+
+ggplot2::ggplot(df_night_plot_new) + ggplot2::geom_histogram(ggplot2::aes(x = interval)) +
+  ggplot2::facet_wrap(ggplot2::vars(participant_id))
+
+df_night_plot$correction <- "No"
+df_night_plot_new$correction <- "Yes"
+df_night_plot_both <- rbind(df_night_plot, df_night_plot_new)
+df_night_plot_both$correction <- as.factor(df_night_plot_both$correction)
+
+ggplot2::ggplot(df_night_plot_both) + ggplot2::geom_histogram(ggplot2::aes(x = interval, fill = correction), position = "dodge") +
+  ggplot2::facet_wrap(ggplot2::vars(participant_id))
+
+average_night_il_i_new <- apply(night_il_new, 2, mean, na.rm = TRUE)
+hist(average_night_il_i_new / 60 / 60)
+mean(average_night_il_i_new / 60 / 60)
+mean(average_night_il_i_new / 60)
+
+# delta t
+mean(average_night_il_i_new) / mean(average_day_il_i_new, na.rm = TRUE)
