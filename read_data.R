@@ -91,22 +91,29 @@ addMissingsDay <- function(dat, i, d, begin_i, n_missing) {
     # create new vectors
     new_interval_length <- as.numeric(interval_length)
     new_beep_nr <- beep_nr
+
+    # transform to list to easily add multiple values in place
+    list_interval_length <- as.list(new_interval_length)
+    list_beep_nr <- as.list(new_beep_nr)
     
     # repeated for every NA to add
     for (r in 1:n_na) {
-      # transform to list to easily add multiple values in place
-      list_interval_length <- as.list(new_interval_length)
-      list_beep_nr <- as.list(new_beep_nr)
-      
       # compute the largest interval in the current iteration
-      largest <- which.max(list_interval_length)
+      largest <- which.max(sapply(1:length(interval_length),
+                           function(i) list_interval_length[[i]][1]))
+
+      # extract largest interval(s)
+      largest_interval <- list_interval_length[[largest]]
       
-      # replace largest interval with two intervals of half its length
-      list_interval_length[[largest]] <- rep(list_interval_length[[largest]] / 2,
-                                             2)
-      # unlist to create new vector
-      new_interval_length <- unlist(list_interval_length)
+      # new number of intervals
+      n_interval <- length(largest_interval) + 1
       
+      # divide original interval by new number of intervals
+      new_interval <- sum(largest_interval) / n_interval
+      
+      # replace old interval(s) with new intervals
+      list_interval_length[[largest]] <- rep(new_interval, n_interval)
+        
       # get new beep order
       if (largest > length(list_beep_nr)) {
         # if missing value is added after last beep only add NA
@@ -116,10 +123,10 @@ addMissingsDay <- function(dat, i, d, begin_i, n_missing) {
         # with a missing value and the beep itself
         list_beep_nr[[largest]] <- c(NA, list_beep_nr[[largest]])
       }
-      # unlist to create new vector
-      new_beep_nr <- unlist(list_beep_nr)
     }
     
+    # unlist to create vector of new beep numbers
+    new_beep_nr <- unlist(list_beep_nr)
     # add original observations to new data frame in new order
     new_dat_i_d[which(!is.na(new_beep_nr)), ] <- dat_i_d_na_rm
   }
@@ -175,6 +182,13 @@ dat_NA_wider <- tidyr::pivot_wider(dat_NA, id_cols = c(participant_id, study_day
 write.table(dat_NA_wider, "../../../OneDrive - Universiteit Utrecht/Projects/4. multilevel sleep/data/dat_na.dat",
             na = ".", col.names = FALSE, row.names = FALSE)
 
+propNA <- function(x) {
+  sum(is.na(x)) / length(x)
+}
+
+plot.ts(x = 1:20, y = apply(dat_PA_wider, 2, propNA)[6:25], ylim = c(0, 1))
+plot.ts(x = 1:20, y = apply(dat_NA_wider, 2, propNA)[6:25], ylim = c(0, 1))
+
 # think about plotting
 
 # compute interval lengths
@@ -222,23 +236,31 @@ intervalLengths <- function(dat, i, d, begin_i, phase = "day", n_missing = 20) {
     
     # compute where to add missing values
     if (length(t_start) > 0) {
-      # create new vector
+      # create new vectors
       new_interval_length <- as.numeric(interval_length)
-    
+
+      # transform to list to easily add multiple values in place
+      list_interval_length <- as.list(new_interval_length)
+
       # repeated for every NA to add
       for (r in 1:n_na) {
-        # transform to list to easily add multiple values in place
-        list_interval_length <- as.list(new_interval_length)
-    
         # compute the largest interval in the current iteration
-        largest <- which.max(list_interval_length)
+        largest <- which.max(sapply(1:length(interval_length),
+                                    function(i) list_interval_length[[i]][1]))
         
-        # replace largest interval with two intervals of half its length
-        list_interval_length[[largest]] <- rep(list_interval_length[[largest]] / 2,
-                                               2)
-        # unlist to create new vector
-        new_interval_length <- unlist(list_interval_length)
+        # extract largest interval(s)
+        largest_interval <- list_interval_length[[largest]]
+        
+        # new number of intervals
+        n_interval <- length(largest_interval) + 1
+        
+        # divide original interval by new number of intervals
+        new_interval <- sum(largest_interval) / n_interval
+        
+        # replace old interval(s) with new intervals
+        list_interval_length[[largest]] <- rep(new_interval, n_interval)
       }
+      new_interval_length <- unlist(list_interval_length)
     }
   }
   
