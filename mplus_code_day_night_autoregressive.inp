@@ -1,0 +1,92 @@
+DATA:
+FILE = YOUR_DAT.dat;
+
+VARIABLE:  
+NAMES   = id day B y1-y20; ! adjust based on YOUR_DAT.dat
+CLUSTER = id;
+USEVAR  = B y1-y20;
+BETWEEN = B;
+MISSING = .;
+LAGGED  = y20(1);
+
+DEFINE:
+CENTER B (GRANDMEAN);
+
+ANALYSIS:   
+TYPE = TWOLEVEL RANDOM;              
+ESTIMATOR = BAYES;
+FBITER = 50000;
+BSEED = 1213;
+
+MODEL:
+%WITHIN%
+day_ar1 | y2 ON y1; ! daytime autoregression
+day_ar2 | y3 ON y2; ! specified per beep
+day_ar3 | y4 ON y3; ! constrained to be equal in
+day_ar4 | y5 ON y4; ! between−level
+day_ar5 | y6 ON y5;
+day_ar6 | y7 ON y6;
+day_ar7 | y8 ON y7;
+day_ar8 | y9 ON y8;
+day_ar9 | y10 ON y9;
+day_ar10 | y11 ON y10;
+day_ar11 | y12 ON y11;
+day_ar12 | y13 ON y12;
+day_ar13 | y14 ON y13;
+day_ar14 | y15 ON y14;
+day_ar15 | y16 ON y15;
+day_ar16 | y17 ON y16;
+day_ar17 | y18 ON y17;
+day_ar18 | y19 ON y18;
+day_ar19 | y20 ON y19;
+
+night_ar | y1 ON y20&1; 	! nighttime autoregression
+
+resvar_1 | y1; 			! innov. var. first beep
+resvar2-resvar20 | y2-y20; 	! innov. var. other beeps
+
+%BETWEEN%
+mu BY y1-y20@1;	! compute one mean for all y
+[mu];           ! mean (intercept) of all y
+mu;             ! variance of y mean
+[y1-y20@0];     ! no beep-specific intercepts
+y1-y20@0;       ! no beep-specific residual variances
+
+day_ar by day_ar1-day_ar19@1;   ! constrain daytime ars
+[day_ar*0.6](phi);              ! mean daytime ar
+day_ar*0.01;                    ! residual variance daytime ar
+[day_ar1-day_ar19@0];           ! no beep-specific ar mean
+day_ar1-day_ar19@0;             ! no beep-specific ar res. var.
+
+[night_ar*0.15](alpha);         ! mean nighttime ar
+night_ar*0.01;                  ! residual variance nighttime ar
+
+resvar BY resvar2-resvar20@1;   ! constrain other innov. var.
+[resvar];                       ! mean other beep innov. var.
+resvar;                         ! residual variance other beep
+[resvar2-resvar20@0];           ! no beep-specifc innov. var mean
+resvar2-resvar20@0;             ! no beep-specific res. var.
+
+! random effects regressed on between-level predictor B
+mu night_ar day_ar resvar_1 resvar ON B;
+
+! random effect correlations
+mu night_ar day_ar resvar_1 resvar WITH
+    mu night_ar day_ar resvar_1 resvar;
+
+B; ! estimate variance of B in case of missing values
+
+MODEL CONSTRAINT:
+NEW(diff_ar); ! compute difference between day ar and night ar
+diff_ar = phi - alpha;
+
+OUTPUT:
+TECH1 TECH8 STDYX FSCOMPARISON STAND(CLUSTER);
+
+PLOT: 
+TYPE = PLOT3;
+FACTOR = ALL (500);
+
+SAVEDATA: 
+FILE IS factorscores.dat;
+SAVE IS FSCORES (500);
