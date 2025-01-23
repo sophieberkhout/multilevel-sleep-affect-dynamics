@@ -10,7 +10,7 @@ MISSING = .;
 LAGGED  = y20(1) x(1);
 
 DEFINE:
-CENTER B (GRANDMEAN);
+CENTER B (GRANDMEAN); ! grand mean center between predictor
 
 ANALYSIS:   
 TYPE = TWOLEVEL RANDOM;              
